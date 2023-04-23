@@ -1,0 +1,14 @@
+<RCC>
+  <qresource prefix="/">
+    <file>icon/back_arrow_icon.png</file>
+    <file>icon/forward_arrow_icon.png</file>
+    <file>icon/arrow-right-circle-line (1).png</file>
+    <file>icon/loading2.gif</file>
+    <file>icon/settings-2-line.png</file>
+    <file>icon/shopping-t-shirt-e-commerce-cloth-linear-flat-128.png</file>
+    <file>icon/vcsconflicting_93497.png</file>
+    <file>icon/vcsnormal_93488.png</file>
+    <file>settings-2-line.svg</file>
+    <file>shirt-fill.svg</file>
+  </qresource>
+</RCC>
