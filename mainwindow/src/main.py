@@ -11,18 +11,26 @@ from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QVector3D, QQuaternion, QColor, QMatrix4x4
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFrame
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFrame, QMessageBox
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt,  QRect
-from tkinter import filedialog
+from platform import system
+from moviepy.editor import concatenate_videoclips, VideoFileClip
+import multiprocessing
+
+if system() == 'Darwin':  # Mac OS
+    from PyQt5.QtWidgets import QFileDialog
+else:  # Windows
+    from tkinter import filedialog, Tk
 from PyQt5.QtWidgets import QLabel
 
 import glob, os
-os.add_dll_directory(r'C:\\Program Files\\VideoLAN\\VLC')
+if os.name == 'win':
+    os.add_dll_directory(r'C:\\Program Files\\VideoLAN\\VLC')
 import vlc
 import socket
 import argparse
-from json_operater import load_json_data, update_json_data
+from json_operater import *
 import time
 import subprocess
 
@@ -150,6 +158,18 @@ class VLCPlayer(QFrame):
     def stop(self):
         self.media_list_player.stop()
 
+def render_cloth(cloth_name, json_path):
+    new_elements = [{"name": cloth_name}]
+    update_json_data(json_path, {"data": new_elements})
+    popen = subprocess.Popen('blender -b -P output_movie.py -- ' + cloth_name, shell=True)
+    popen.wait()
+
+def detect_hole(cloth_name, json_path):
+    # new_elements = [{"name": cloth_name}]
+    # update_json_data(json_path, {"data": new_elements})
+    popen = subprocess.Popen('blender -b -P detecting_server.py -- ' + cloth_name, shell=True)
+    popen.wait()
+
 class MainWindow(QtWidgets.QMainWindow):
     cloth_path = ""
     json_path = "./parameter.json"
@@ -259,38 +279,77 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.checkLabel.set_image(img)
             self.png_files.remove(self.png_files[0])
 
+    def find_mp4_files(self, directory):
+        return glob.glob(f"{directory}/**/*.mp4", recursive=True)
+
+    def concatenate_and_save(self, videos, output_file):
+        video_clips = [VideoFileClip(video) for video in videos]
+        concatenated_clip = concatenate_videoclips(video_clips)
+        concatenated_clip.write_videofile(output_file)
+
     def import_cloth(self):
+        clear_data_elements(self.json_path)
         self.ui.tabWidget.setCurrentIndex(0)
         typ = [('objファイル','*.obj')] 
         dir = os.path.dirname(self.data['cloth_path'])
         print(dir)
-        fle = filedialog.askopenfilename(filetypes = typ, initialdir = dir)
-        cloth_name = os.path.basename(fle).replace('.obj', '')
-        self.ui.cloth_name.setText(cloth_name)
-        if fle:
-            self.cloth = True
-            data = {"cloth_path":fle}
-            update_json_data(self.json_path ,data)
-            self.ui.import_cloth_bt.setEnabled(False)
-            self.ui.next1.setEnabled(True)
-            popen = subprocess.Popen('blender -b -P output_movie.py', shell=True)
-            popen.wait()
-            video_path = "./init.mp4"
-            self.vlc_player2.set_video(video_path)
-            self.vlc_player2.play()
+        if system() == 'Darwin':  # Mac OS
+            options = QFileDialog.Options()
+            options |= QFileDialog.ReadOnly | QFileDialog.ShowDirsOnly
+            fle = QFileDialog.getExistingDirectory(None, "Select a directory", dir, options=options)
+        else:  # Windows
+            root = Tk()
+            root.withdraw()
+            fle = filedialog.askdirectory(initialdir=dir)
+
+        if os.path.isdir(fle):
+            self.obj_files = [os.path.join(fle, file) for file in os.listdir(fle) if file.endswith('.obj')]
+            print("List of .obj files in the selected directory:", self.obj_files)
+            if len(self.obj_files) > 0:
+                json_data = {"cloth_path":fle}
+                update_json_data(self.json_path ,json_data)
+                all_cloth_name = ""
+                pool = multiprocessing.Pool(multiprocessing.cpu_count())  # Create a Pool with the number of CPU cores
+                # Replace your for loop with this one
+                for file in self.obj_files:
+                    cloth_name = os.path.basename(file).replace('.obj', '')
+                    pool.apply_async(render_cloth, args=(cloth_name, self.json_path))
+                    all_cloth_name += cloth_name + "\n"
+                pool.close()
+                pool.join()
+                pool.terminate()
+                self.ui.cloth_name.setText(all_cloth_name)
+                # Rest of your code
+                output_directory = "../output"
+                mp4_files = self.find_mp4_files(output_directory)
+                if mp4_files:
+                    output_file = os.path.join(output_directory, "init.mp4")
+                    self.concatenate_and_save(mp4_files, output_file)
+                    self.vlc_player2.set_video(output_file)
+                    self.vlc_player2.play()
+                    self.next1()
+                else:
+                    QMessageBox.information(self, "Warning", "No mp4 files found.")
+                    print("No mp4 files found.")
         else:
-            self.cloth = False
-
-
-    def next1(self):
-        self.ui.tabWidget.setCurrentIndex(1)
-        self.ui.detecting_st.setEnabled(True)
-        self.ui.check_st.setEnabled(False)
-        self.ui.import_st.setEnabled(False)
-        self.popen = subprocess.Popen('blender -b -P ./repairing_server.py', shell=True)
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.check_process)
-        self.timer.start(1000)
+            QMessageBox.information(self, "Warning", "No directory selected.")
+            print("No directory selected.")
+            return 
+        # else:  # Windows
+        #     root = Tk()
+        #     root.withdraw()
+        #     fle = filedialog.askopenfilename(filetypes=typ, initialdir=dir)
+        #     cloth_name = os.path.basename(fle).replace('.obj', '')
+        #     self.ui.cloth_name.setText(cloth_name)
+        #     if fle:
+        #         self.cloth = True
+        #         json_data = {"cloth_path":fle}
+        #         update_json_data(self.json_path ,data)
+        #         self.ui.import_cloth_bt.setEnabled(False)
+        #         self.ui.next1.setEnabled(True)
+        #         video_path = "./init.mp4"
+        #     else:
+        #         self.cloth = False
 
     def next2(self):
         self.ui.tabWidget.setCurrentIndex(2)
@@ -301,8 +360,38 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.timer.timeout.connect(self.check_process)
         # self.timer.start(1000)
     
+    def next1(self):
+        self.ui.tabWidget.setCurrentIndex(1)
+        self.ui.detecting_st.setEnabled(True)
+        self.ui.check_st.setEnabled(False)
+        self.ui.import_st.setEnabled(False)
+
+        pool = multiprocessing.Pool(multiprocessing.cpu_count())  # Create a Pool with the number of CPU cores
+
+        # Replace your for loop with this one
+        async_results = []
+        for file in self.obj_files:
+            cloth_name = os.path.basename(file).replace('.obj', '')
+            async_result = pool.apply_async(detect_hole, args=(cloth_name, self.json_path))
+            async_results.append(async_result)
+
+        pool.close()
+
+        # Save async_results and pool to the instance
+        self.async_results = async_results
+        self.pool = pool
+
+        # QTimerを使ってプロセスの状態を定期的にチェックします
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.check_process)
+        self.timer.start(1000)
+
     def check_process(self):
-        if self.popen.poll() is not None:
+        # Check if all AsyncResult objects are ready
+        if all(async_result.ready() for async_result in self.async_results):
+            self.timer.stop()
+            self.pool.join()
+            self.pool.terminate()
             self.timer.stop()
             self.data = load_json_data(self.json_path)
             directory = os.path.dirname(self.data["linked_face_path"])

@@ -1,6 +1,7 @@
 import bpy
 import bmesh
 from mathutils import Vector
+import mathutils
 import shutil
 import os
 from collections import defaultdict
@@ -10,6 +11,27 @@ from cloth_util import make_camera
 from collections import deque
 from subprocess import Popen
 import subprocess
+import numpy as np
+import csv
+
+def save_to_csv(data, filename):
+    with open(filename, mode='w', newline='', encoding='utf-8') as csvfile:
+        csv_writer = csv.writer(csvfile, delimiter=',')
+        for row in data:
+            csv_writer.writerow(row)
+
+def merge_overlapping_groups(edge_group):
+    merged_groups = []
+    for group in edge_group:
+        found_overlap = False
+        for merged_group in merged_groups:
+            if set(group) & set(merged_group):
+                merged_group.extend(x for x in group if x not in merged_group)
+                found_overlap = True
+                break
+        if not found_overlap:
+            merged_groups.append(group)
+    return merged_groups
 
 def set_camera_position_and_direction(camera, obj):
     bbox = obj.bound_box
@@ -61,6 +83,19 @@ def render_and_save_elements(obj, output_path, camera):
         obj.hide_render = False
         # コピーを削除
         bpy.data.objects.remove(obj_copy)
+
+def merge_overlapping_groups(edge_group):
+    merged_groups = []
+    for group in edge_group:
+        found_overlap = False
+        for merged_group in merged_groups:
+            if set(group) & set(merged_group):
+                merged_group.extend(x for x in group if x not in merged_group)
+                found_overlap = True
+                break
+        if not found_overlap:
+            merged_groups.append(group)
+    return merged_groups
 
 def delete_except_largest_linked_face(obj):
     if obj.type != 'MESH':
@@ -288,7 +323,10 @@ def find_loops(edges):
         return loop, loop_edges, loop_length
 
     while vertex_to_edge_map:
-        start_edge = next(iter(vertex_to_edge_map.values())).pop()
+        start_edge = next(iter(vertex_to_edge_map.values()))
+        if not start_edge:
+            break
+        start_edge = start_edge.pop()
         loop, loop_edges, loop_length = find_loop(start_edge, vertex_to_edge_map)
 
         if len(loop) > 2:
@@ -335,24 +373,10 @@ def select_edges(obj, edges):
     # 編集モードに戻す
     bpy.ops.object.mode_set(mode='EDIT')
 
-# def select_edges(obj, edges):
-#     if obj.type != 'MESH':
-#         print("Error: Object must be of type 'MESH'")
-#         return
-#     bpy.ops.object.mode_set(mode='EDIT')
-#     mesh = obj.data
-#     bm = bmesh.from_edit_mesh(mesh)
-
-#     for edge_idx in edges:
-#         if edge_idx < len(bm.edges):
-#             bm.edges[edge_idx].select = True
-#         else:
-#             print(f"Warning: Edge index {edge_idx} is out of range")
-
-#     bmesh.update_edit_mesh(mesh)
-
 
 def find_optimized_loop(loop_edges):
+    from collections import defaultdict
+
     vertex_to_edge_map = defaultdict(set)
 
     for edge in loop_edges:
@@ -381,6 +405,9 @@ def find_optimized_loop(loop_edges):
 
         return largest_loop
 
+    if not vertex_to_edge_map:
+        return [], []
+
     largest_loop = find_largest_loop(next(iter(vertex_to_edge_map)), vertex_to_edge_map)
 
     optimized_edges = []
@@ -394,6 +421,7 @@ def find_optimized_loop(loop_edges):
                 break
 
     return optimized_edges, largest_loop
+
 
 def is_valid_loop(edge_list):
     # エッジから頂点のリストを作成
@@ -439,57 +467,192 @@ def delete_selected_edges(obj):
     bmesh.update_edit_mesh(mesh)
     bpy.ops.object.mode_set(mode='OBJECT')
 
+from collections import deque
+
+
 def can_split_object(edge_list, obj, bm):
-    # オリジナルのBMeshオブジェクトを変更しないためにコピーを作成
     bm_copy = bm.copy()
-    # 内部インデックステーブルの更新
     bm_copy.verts.ensure_lookup_table()
     bm_copy.edges.ensure_lookup_table()
     bm_copy.faces.ensure_lookup_table()
 
-    # エッジリストの削除
-    edge_indices_to_remove = {edge.index for edge in edge_list}
-    edges_to_remove = [edge for edge in bm_copy.edges if edge.index in edge_indices_to_remove]
-    for edge in edges_to_remove:
-        bm_copy.edges.remove(edge)
-        
-
-    # 内部インデックステーブルの更新
-    bm_copy.verts.ensure_lookup_table()
-    bm_copy.edges.ensure_lookup_table()
-    bm_copy.faces.ensure_lookup_table()
-
-    # 面のタグをリセット
     for face in bm_copy.faces:
         face.tag = False
 
-    def flood_fill(face):
-        face_queue = deque([face])
+    def flood_fill(start_face, forbidden_edges):
+        face_queue = deque([start_face])
 
         while face_queue:
             current_face = face_queue.popleft()
             current_face.tag = True
 
             for loop in current_face.loops:
-                linked_faces = loop.edge.link_faces
-                for lf in linked_faces:
-                    if not lf.tag:
-                        lf.tag = True
-                        face_queue.append(lf)
+                if loop.edge.index not in forbidden_edges:
+                    linked_faces = [lf for lf in loop.edge.link_faces if lf != current_face and loop.edge.index not in forbidden_edges]  # Apply forbidden_edges constraint in linked_faces list generation
+                    for lf in linked_faces:
+                        if not lf.tag:
+                            lf.tag = True
+                            face_queue.append(lf)
 
-    # Flood fillアルゴリズムで面の連結をチェック
-    regions_count = 0
-    for face in bm_copy.faces:
-        if not face.tag:
-            # エッジの削除後に内部インデックステーブルを更新
-            bm_copy.edges.ensure_lookup_table()
-            regions_count += 1
-            flood_fill(face)
-            if regions_count > 1:
-                break
+    edge_indices = {edge.index for edge in edge_list}
+    first_edge = edge_list[0]
+    linked_faces = first_edge.link_faces
 
-    # BMeshオブジェクトを破棄
+    if len(linked_faces) != 2:
+        bm_copy.free()
+        return False
+
+    start_face1 = linked_faces[0]
+    start_face2 = linked_faces[1]
+
+    flood_fill(start_face1, edge_indices)
+
+    is_split_possible = not start_face2.tag
+
     bm_copy.free()
 
-    # オブジェクトが2つに分離できるかどうかを判定
-    return regions_count > 1
+    return is_split_possible
+from collections import deque
+
+def can_split_object2(edge_list, bm, direction):
+    bm_copy = bm.copy()
+    bm_copy.verts.ensure_lookup_table()
+    bm_copy.edges.ensure_lookup_table()
+    bm_copy.faces.ensure_lookup_table()
+
+    def flood_fill(start_face, forbidden_edges):
+        visited_faces = set()
+        face_queue = deque([start_face])
+
+        while face_queue:
+            current_face = face_queue.popleft()
+            visited_faces.add(current_face)
+
+            for loop in current_face.loops:
+                if loop.edge not in forbidden_edges:
+                    linked_faces = loop.edge.link_faces
+                    for lf in linked_faces:
+                        if lf not in visited_faces and loop.edge not in forbidden_edges:
+                            visited_faces.add(lf)
+                            face_queue.append(lf)
+        return visited_faces
+
+    edge_list = list(edge_list)
+    first_edge = edge_list[0]
+    linked_faces = first_edge.link_faces
+
+    if len(linked_faces) != 2:
+        bm_copy.free()
+        return False
+
+    start_face1 = linked_faces[0]
+    start_face2 = linked_faces[1]
+
+    visited_faces = flood_fill(start_face1, edge_list)
+
+    is_split_possible = start_face2 not in visited_faces
+
+    bm_copy.free()
+
+    return is_split_possible
+
+
+def find_largest_loop(obj, edge_list):
+    # エッジリスト内のエッジから頂点を取得し、リスト内での出現回数をカウント
+    vert_count = {}
+    for edge in edge_list:
+        for vert in edge.verts:
+            if vert not in vert_count:
+                vert_count[vert] = 0
+            vert_count[vert] += 1
+
+    # 輪っかを構成する頂点を抽出 (各頂点はちょうど2回出現する)
+    loop_verts = [vert for vert in vert_count if vert_count[vert] == 2]
+
+    # 輪っかを構成しないエッジを削除
+    loop_edges = [edge for edge in edge_list if all(vert in loop_verts for vert in edge.verts)]
+
+    # 輪っかを構成するエッジが存在しない場合、空のリストを返す
+    if not loop_edges:
+        return []
+
+    # 輪っかを構成するエッジを順番通りに並べ替える
+    ordered_loop_edges = [loop_edges.pop(0)]
+    while loop_edges:
+        current_edge = ordered_loop_edges[-1]
+        for i, edge in enumerate(loop_edges):
+            if current_edge.verts[1] == edge.verts[0]:
+                ordered_loop_edges.append(loop_edges.pop(i))
+                break
+            elif current_edge.verts[1] == edge.verts[1]:
+                edge.verts.reverse()
+                ordered_loop_edges.append(loop_edges.pop(i))
+                break
+        else:
+            break
+
+    return ordered_loop_edges
+
+def highlight_edges(mesh_object, edge_indices, color=(1, 0, 0), width=3):
+    bpy.context.view_layer.objects.active = mesh_object
+    mesh_object.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    for edge_index in edge_indices:
+        mesh_object.data.edges[edge_index].select = True
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.mark_freestyle_edge()
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    active_view_layer = bpy.context.view_layer
+    lineset = active_view_layer.freestyle_settings.linesets.new("HighlightedEdges")
+    lineset.linestyle.color = color
+    lineset.linestyle.thickness = width
+    lineset.select_by_visibility = False
+    lineset.select_by_edge_types = True  # Changed to the correct attribute name
+    # lineset.edge_mark = True
+    # lineset.select_by_edge_marks = True
+
+
+
+
+
+def render_image(output_filepath, resolution_x=1920, resolution_y=1080, samples=128):
+    scene = bpy.context.scene
+    scene.render.image_settings.file_format = 'PNG'
+    scene.render.filepath = output_filepath
+    scene.render.resolution_x = resolution_x
+    scene.render.resolution_y = resolution_y
+    scene.render.engine = 'CYCLES'
+    scene.cycles.samples = samples
+    scene.view_layers["View Layer"].use_pass_freestyle = True
+    scene.render.use_freestyle = True
+    bpy.ops.render.render(write_still=True)
+
+
+def create_camera_auto(mesh_object, edge_indices, camera_name="Camera"):
+    # 1. Compute the center of the selected edges
+    edge_centers = [(mesh_object.vertices[mesh_object.edges[edge_index].vertices[0]].co + mesh_object.vertices[mesh_object.edges[edge_index].vertices[1]].co) / 2 for edge_index in edge_indices]  # Fixed line
+    center = np.mean(np.array(edge_centers), axis=0)
+
+    # 2. Calculate the bounding box of the selected edges
+    min_coords = np.min(edge_centers, axis=0)
+    max_coords = np.max(edge_centers, axis=0)
+    size = max_coords - min_coords
+
+    # Compute camera position and distance
+    max_size = max(size)
+    distance = max_size / (2 * np.tan(np.radians(45 / 2)))
+
+    camera_data = bpy.data.cameras.new(name=camera_name)
+    camera = bpy.data.objects.new(camera_name, camera_data)
+    bpy.context.collection.objects.link(camera)
+
+    # Set camera location and rotation
+    camera.location = center + mathutils.Vector((0, -distance, 0))
+    camera.rotation_euler = (np.pi / 2, 0, 0)
+
+    return camera

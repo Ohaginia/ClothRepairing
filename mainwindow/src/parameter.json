@@ -1,23 +1,21 @@
 {
-  "success": true,
-  "progress": 10,
-  "cloth_path": "C:/Users/hamas/Documents/RepairingClothProject/data/MJA00002788/MJA00002788.obj",
-  "export_path": "C:/Users/hamas/Documents/ClothFitting/src/resorce/output/saoko_walk/UDEAGE-WDR00000899/[saoko_walk]UDEAGE-WDR00000899.mp4",
+  "success": false,
+  "progress": 7030,
+  "cloth_path": "/Users/shoma/Documents/Laila/ClothRepairing/data/test_data2",
+  "export_path": ".",
   "data": [
-    {   
-        "name": "",
-        "remove": [],
-        "leave": []
+    {
+      "name": "WTO00000984"
     },
-    {   
-        "name": "",
-        "remove": [],
-        "leave": []
+    {
+      "name": "WTO00001737"
     },
-    {   
-        "name": "",
-        "remove": [],
-        "leave": []
+    {
+      "name": "WJA00003954"
+    },
+    {
+      "name": "WTO00001223"
     }
-  ]
+  ],
+  "linked_face_path": "/Users/shoma/Documents/Laila/ClothRepairing/mainwindow/src/tmp/"
 }
