@@ -307,7 +307,7 @@
        <string notr="true">background-color: rgb(255, 255, 255);</string>
       </property>
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -354,7 +354,7 @@
              <string>...</string>
             </property>
             <property name="icon">
-             <iconset resource="resource.qrc">
+             <iconset>
               <normaloff>:/icon/shopping-t-shirt-e-commerce-cloth-linear-flat-128.png</normaloff>:/icon/shopping-t-shirt-e-commerce-cloth-linear-flat-128.png</iconset>
             </property>
             <property name="iconSize">
@@ -434,6 +434,13 @@
          </spacer>
         </item>
         <item>
+         <widget class="QProgressBar" name="progress_2">
+          <property name="value">
+           <number>0</number>
+          </property>
+         </widget>
+        </item>
+        <item>
          <layout class="QHBoxLayout" name="horizontalLayout_7">
           <item>
            <spacer name="horizontalSpacer_9">
@@ -454,7 +461,7 @@
              <string>...</string>
             </property>
             <property name="icon">
-             <iconset resource="resource.qrc">
+             <iconset>
               <normaloff>:/icon/arrow-right-circle-line (1).png</normaloff>:/icon/arrow-right-circle-line (1).png</iconset>
             </property>
             <property name="iconSize">
@@ -619,7 +626,7 @@
                <string>...</string>
               </property>
               <property name="icon">
-               <iconset resource="resource.qrc">
+               <iconset>
                 <normaloff>:/icon/back_arrow_icon.png</normaloff>:/icon/back_arrow_icon.png</iconset>
               </property>
               <property name="iconSize">
@@ -678,7 +685,7 @@
                <string>...</string>
               </property>
               <property name="icon">
-               <iconset resource="resource.qrc">
+               <iconset>
                 <normaloff>:/icon/forward_arrow_icon.png</normaloff>:/icon/forward_arrow_icon.png</iconset>
               </property>
               <property name="iconSize">
@@ -776,7 +783,7 @@
                <string>...</string>
               </property>
               <property name="icon">
-               <iconset resource="resource.qrc">
+               <iconset>
                 <normaloff>:/icon/vcsconflicting_93497.png</normaloff>:/icon/vcsconflicting_93497.png</iconset>
               </property>
               <property name="iconSize">
@@ -840,7 +847,7 @@
                <string>...</string>
               </property>
               <property name="icon">
-               <iconset resource="resource.qrc">
+               <iconset>
                 <normaloff>:/icon/vcsnormal_93488.png</normaloff>:/icon/vcsnormal_93488.png</iconset>
               </property>
               <property name="iconSize">

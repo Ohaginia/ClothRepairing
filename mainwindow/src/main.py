@@ -33,6 +33,8 @@ import argparse
 from json_operater import *
 import time
 import subprocess
+import time
+from functools import partial
 
 def get_main_window(widget):
     while widget:
@@ -158,11 +160,15 @@ class VLCPlayer(QFrame):
     def stop(self):
         self.media_list_player.stop()
 
-def render_cloth(cloth_name, json_path):
+def render_cloth(cloth_name, json_path, progress, stop_event):
     new_elements = [{"name": cloth_name}]
     update_json_data(json_path, {"data": new_elements})
+    if stop_event.is_set():
+        return
     popen = subprocess.Popen('blender -b -P output_movie.py -- ' + cloth_name, shell=True)
     popen.wait()
+    with progress.get_lock():
+        progress.value += 1
 
 def detect_hole(cloth_name, json_path):
     # new_elements = [{"name": cloth_name}]
@@ -287,7 +293,19 @@ class MainWindow(QtWidgets.QMainWindow):
         concatenated_clip = concatenate_videoclips(video_clips)
         concatenated_clip.write_videofile(output_file)
 
+    def update_progress(self):
+        progress_value = self.progress
+        progress_percentage = int(100 * progress_value / len(self.obj_files))
+        self.ui.progress_2.setValue(int(progress_percentage))
+        if progress_value == len(self.obj_files):
+            self.progress_timer.stop()
+
+    def on_actionExit_triggered(self):
+        self.stop_event.set()
+        QApplication.quit()
+
     def import_cloth(self):
+        self.progress=0
         clear_data_elements(self.json_path)
         self.ui.tabWidget.setCurrentIndex(0)
         typ = [('objファイル','*.obj')] 
@@ -310,12 +328,18 @@ class MainWindow(QtWidgets.QMainWindow):
                 update_json_data(self.json_path ,json_data)
                 all_cloth_name = ""
                 pool = multiprocessing.Pool(multiprocessing.cpu_count())  # Create a Pool with the number of CPU cores
+                progress = multiprocessing.Value('i', 0)
+                self.stop_event = multiprocessing.Event()
                 # Replace your for loop with this one
                 for file in self.obj_files:
                     cloth_name = os.path.basename(file).replace('.obj', '')
-                    pool.apply_async(render_cloth, args=(cloth_name, self.json_path))
+                    pool.apply_async(render_cloth, args=(cloth_name, self.json_path, progress))
                     all_cloth_name += cloth_name + "\n"
                 pool.close()
+                self.progress_timer = QTimer(self)
+                self.progress_timer.timeout.connect(self.update_progress)
+                self.progress_timer.start(100)
+
                 pool.join()
                 pool.terminate()
                 self.ui.cloth_name.setText(all_cloth_name)
@@ -408,10 +432,12 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.data = load_json_data(self.json_path)
             if self.data["progress"] == 100:
-                self.timer.stop()
-                self.switch_to_tab_3()
+                pass
+            #     self.timer.stop()
+            #     self.switch_to_tab_3()
             else:
-                self.ui.progress.setValue(int(self.data["progress"]))
+                pass
+                # self.ui.progress.setValue(int(self.data["progress"]))
 
     def switch_to_tab_3(self):
         self.data = load_json_data(self.json_path)

@@ -83,6 +83,7 @@ def render_and_save_elements(obj, output_path, camera):
         obj.hide_render = False
         # コピーを削除
         bpy.data.objects.remove(obj_copy)
+    return linked_faces_list
 
 def merge_overlapping_groups(edge_group):
     merged_groups = []

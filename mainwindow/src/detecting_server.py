@@ -51,8 +51,9 @@ if __name__ == '__main__':
     # max_len = max(len(faces) for faces in linked_faces_list)
     linked_face_path = os.path.join(output_dir, "linked_faces")
     os.makedirs(linked_face_path, exist_ok= True)
-    render_and_save_elements(donattu_obj, linked_face_path, camera_obj)
-    progress = 10
+    linked_faces_list=render_and_save_elements(donattu_obj, linked_face_path, camera_obj)
+    csv_face_path = output_dir + "face.csv"
+    save_to_csv(linked_faces_list, csv_face_path)
     # progress_data = {"progress": progress}
     # update_json_data(json_path, progress_data)
 
@@ -141,8 +142,8 @@ if __name__ == '__main__':
         print("edge_groups: ", edge_groups)
         result = merge_overlapping_groups(edge_groups)
         print("result: ", result)
-        csv_path = output_dir + "edge.csv"
-        save_to_csv(result, csv_path)
+        csv_edge_path = output_dir + "edge.csv"
+        save_to_csv(result, csv_edge_path)
         print("find hole end")
         # success_data = {"success": True}
         # update_json_data(json_path, success_data)

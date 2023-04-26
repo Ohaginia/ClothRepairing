@@ -3,19 +3,6 @@
   "progress": 7030,
   "cloth_path": "/Users/shoma/Documents/Laila/ClothRepairing/data/test_data2",
   "export_path": ".",
-  "data": [
-    {
-      "name": "WTO00000984"
-    },
-    {
-      "name": "WTO00001737"
-    },
-    {
-      "name": "WJA00003954"
-    },
-    {
-      "name": "WTO00001223"
-    }
-  ],
+  "data": [],
   "linked_face_path": "/Users/shoma/Documents/Laila/ClothRepairing/mainwindow/src/tmp/"
 }
